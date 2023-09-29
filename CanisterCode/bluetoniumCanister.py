@@ -1,8 +1,8 @@
+import time
 import socket
 import threading
 import board
 import neopixel
-import time
 import pygame.mixer
 import json
 
@@ -10,21 +10,21 @@ import json
 class animation:
     def __init__(self, frames, framerate, sound = None):
         self.frames = frames
-        self.currentFrame = 0;
+        self.currentFrame = 0
         self.timeBetweenFrames = 1/framerate
         self.soundDir = "sounds/"
         if sound != "":
             self.sound = pygame.mixer.Sound(self.soundDir + sound)
             self.sound.play(-1)
         else:
-            self.sound = None  
+            self.sound = None
 
     def playSound(self):
-        if self.sound != None:
-            self.sound.play(-1)    
+        if self.sound is not None:
+            self.sound.play(-1)
 
     def stop(self):
-        if self.sound != None:
+        if self.sound is not None:
             self.sound.stop()  
 
     def play(self,leds) -> list:
@@ -51,16 +51,16 @@ class bluetoinumContainer:
     def playAnimation(self, currentAnimation : animation):
         currentAnimation.playSound()
         while not self.stopCurrentAnimation:
-                currentAnimation.play()
+            currentAnimation.play()
         currentAnimation.stop()
 
     def loadAnimation(self, file : str) -> animation:
         try:
-            with open(self.animationDir + file) as file:
+            with open(self.animationDir + file,"rt") as file:
                 data = json.load(file)
                 return animation(data["frames"], data["framerate"], data["sound"])
 
-        except FileNotFoundError as fnfe:
+        except FileNotFoundError:
             return "Animation file not found"
         except Exception:
             return "unknown error with loading animation"
@@ -77,7 +77,7 @@ class bluetoinumContainer:
             return selectedAnimation
 
     def log(self,message : str):
-        with open("log.txt","a") as file:
+        with open("log.txt","at") as file:
             file.write(message)
     
     def start(self):
@@ -97,14 +97,14 @@ class bluetoinumContainer:
                     data = data.decode()
                     if data == "quit":
                         break
-                    for command in self.commands():
+                    for command in self.commands:
                         if command.__name__ == data:
                             try:
                                 response = command(data.split(",")[1:])
-                            except Exception as e:
-                                response = e
-                            finally:
-                                conn.send(response.encode())
+                            except Exception as exceptionMessage:
+                                response = exceptionMessage
+                            
+                            conn.send(response.encode())
                             break
                     else:
                         conn.send("Command not found") 
