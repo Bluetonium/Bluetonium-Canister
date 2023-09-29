@@ -110,6 +110,9 @@ class bluetoinumContainer:
    
     def meltdown(self) -> str:
         return self.startAnimation("meltdown")
+    
+    def playAnimation(self,animationToPlay):
+        return self.startAnimation(animationToPlay)
 
     def fill(self,color):
         self.leds.fill(tuple(color))
