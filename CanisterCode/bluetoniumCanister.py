@@ -6,7 +6,6 @@ import neopixel
 import pygame.mixer
 import json
 
-
 class animation:
     def __init__(self, frames, framerate, sound = None):
         self.frames = frames
@@ -59,11 +58,8 @@ class bluetoinumContainer:
             with open(self.animationDir + file,"rt") as file:
                 data = json.load(file)
                 return animation(data["frames"], data["framerate"], data["sound"])
-
         except FileNotFoundError:
             return "Animation file not found"
-        except Exception:
-            return "unknown error with loading animation"
 
     def startAnimation(self, fileName : str) -> str:
         if self.currentAnimation != None and self.currentAnimation.is_alive:
