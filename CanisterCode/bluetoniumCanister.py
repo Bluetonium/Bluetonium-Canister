@@ -1,4 +1,5 @@
 import time
+import os
 import socket
 import threading
 import board
@@ -7,30 +8,17 @@ import pygame.mixer
 import json
 
 class animation:
-    def __init__(self, frames, framerate, sound = None):
+    def __init__(self, frames, framerate):  
         self.frames = frames
         self.currentFrame = 0
         self.timeBetweenFrames = 1/framerate
-        self.soundDir = "sounds/"
-        if sound != "":
-            self.sound = pygame.mixer.Sound(self.soundDir + sound)
-            self.sound.play(-1)
-        else:
-            self.sound = None
-
-    def playSound(self):
-        if self.sound is not None:
-            self.sound.play(-1)
-
-    def stop(self):
-        if self.sound is not None:
-            self.sound.stop()  
 
     def play(self,leds) -> list:
         if self.currentFrame == len(self.frames):
             self.currentFrame = 0
         for index in range(len(leds)):
             leds[index] = self.frames[self.currentFrame][index]
+        self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
         
 
@@ -41,40 +29,63 @@ class bluetoinumContainer:
         self.PORT = 5
         self.ADDRESS = "B8:27:EB:55:55:59"
         self.animationDir = "animations/"
+        self.soundDir = "sounds/"
         self.active = True
         self.currentAnimation = None
         self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1)
         self.commands = [self.meltdown,self.fill,self.testAnimation,self.stop]
         self.stopCurrentAnimation = False    
+        self.currentSound = None
 
-    def playAnimation(self, currentAnimation : animation):
-        currentAnimation.playSound()
-        while not self.stopCurrentAnimation:
-            currentAnimation.play()
-        currentAnimation.stop()
-
-    def loadAnimation(self, file : str) -> animation:
+    
+    def loadAnimation(self, fileName : str) -> animation:
         try:
-            with open(self.animationDir + file,"rt") as file:
+            with open(f"{self.animationDir}{fileName}") as file:
+                print("loading json")
                 data = json.load(file)
-                return animation(data["frames"], data["framerate"], data["sound"])
-        except FileNotFoundError:
-            return "Animation file not found"
+                print("json loaded")
+                print("creating animation")
+                if data["sound"] != "":
+                    try:
+                        self.currentSound = pygame.mixer.Sound(self.soundDir + data["sound"])
+                        print("sound file loaded")
+                    except FileNotFoundError:
+                        return "Sound file not found"
+                return animation(data["frames"], data["framerate"])
+        except FileNotFoundError as fnfe:
+            return f"Animation file not found {fnfe.filename}"
+        
+    def playAnimation(self, currentAnimation : animation):
+        self.currentSound.play()
+        while not self.stopCurrentAnimation:
+            currentAnimation.play(self.leds)
+        
+        
+    def killCurrentAnimation(self):
+        if self.currentAnimation is None or not self.currentAnimation.is_alive:
+            return
+        self.stopCurrentAnimation = True
+        if self.currentSound is not None:
+            self.currentSound.stop()
+        self.currentAnimation.join()
+        self.stopCurrentAnimation = False
 
     def startAnimation(self, fileName : str) -> str:
-        if self.currentAnimation != None and self.currentAnimation.is_alive:
-            self.stopCurrentAnimation = True
-            self.currentAnimation.join()
+        self.killCurrentAnimation()
+        print("loading animation")
         selectedAnimation = self.loadAnimation(fileName)
+        print("animation loaded")
         if isinstance(selectedAnimation,animation):
+            print("starting thread")
             self.currentAnimation = threading.Thread(target=self.playAnimation,args=(selectedAnimation,))
+            self.currentAnimation.start()
             return "OK"
         else:
             return selectedAnimation
 
     def log(self,message : str):
         with open("log.txt","at") as file:
-            file.write(message)
+            file.write(message + "\n")
     
     def start(self):
         print("starting")
@@ -83,7 +94,7 @@ class bluetoinumContainer:
         server.listen(2)
         print("listening")
         while self.active:
-            try:
+            #try:
                 conn, address = server.accept()
                 self.log(f"accepting connection from {address}")
                 while True:
@@ -91,43 +102,43 @@ class bluetoinumContainer:
                     if data == None:
                         continue
                     data = data.decode()
+                    print(f"recived command {data}")
                     if data == "quit":
                         break
                     for command in self.commands:
                         if command.__name__ == data:
-                            try:
-                                response = command(data.split(",")[1:])
-                            except Exception as exceptionMessage:
-                                response = exceptionMessage
-                            
-                            conn.send(response.encode())
-                            break
+                            #try:
+                                args = data.split(',')[1:]
+                                response = command(*args)
+                                if response is None:
+                                    response = "OK"
+                            #except Exception as exceptionMessage:
+                             #   response = str(exceptionMessage)
+                                conn.send(response.encode())
+                                break
                     else:
-                        conn.send("Command not found") 
-            except Exception as e:
-                self.log(f"ERROR : {e}")
+                        conn.send("Command not found".encode()) 
+            #except Exception as e:
+               # self.log(f"ERROR : {e}")
         server.close()
    
     def meltdown(self) -> str:
         return self.startAnimation("meltdown")
-    
-    def playAnimation(self,animationToPlay):
-        return self.startAnimation(animationToPlay)
 
     def fill(self,color):
         self.leds.fill(tuple(color))
+        return "OK"
 
     def testAnimation(self):
-        self.startAnimation("test.json")
+        return self.startAnimation("test.json")
 
     def stop(self):
-        self.active = False
+        self.killCurrentAnimation()
+        return "OK"
         
 
 if __name__ == "__main__":
     pygame.mixer.init()
-    print("pygame init")
     thing = bluetoinumContainer()
-    print("starting")
     thing.start()
     thing.leds.fill((0,0,0))
