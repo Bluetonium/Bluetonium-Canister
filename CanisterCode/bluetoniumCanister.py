@@ -20,7 +20,6 @@ class animation:
             leds[index] = self.frames[self.currentFrame][index]
         self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
-        
 
 class bluetoinumContainer:
     def __init__(self):
@@ -33,7 +32,7 @@ class bluetoinumContainer:
         self.active = True
         self.currentAnimation = None
         self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1)
-        self.commands = [self.meltdown,self.fill,self.testAnimation,self.stop]
+        self.commands = [self.fill,self.testAnimation,self.stop]
         self.stopCurrentAnimation = False    
         self.currentSound = None
     
@@ -85,7 +84,6 @@ class bluetoinumContainer:
         server = socket.socket(socket.AF_BLUETOOTH,socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         server.bind((self.ADDRESS,self.PORT))
         server.listen(2)
-        print("listening")
         while self.active:
             try:
                 conn, address = server.accept()
@@ -114,9 +112,6 @@ class bluetoinumContainer:
             except Exception as e:
                self.log(f"ERROR : {e}")
         server.close()
-   
-    def meltdown(self) -> str:
-        return self.startAnimation("meltdown")
 
     def fill(self,color):
         self.leds.fill(tuple(color))
@@ -124,6 +119,9 @@ class bluetoinumContainer:
 
     def testAnimation(self):
         return self.startAnimation("test.json")
+    
+    def anyAnimation(self, animationToPlay : str):
+        return self.startAnimation(animationToPlay)
 
     def stop(self):
         self.killCurrentAnimation()
