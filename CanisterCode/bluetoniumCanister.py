@@ -8,16 +8,22 @@ import pygame.mixer
 import json
 
 class animation:
-    def __init__(self, frames, framerate):  
+    def __init__(self, frames : list, framerate : int , loop : int):  
         self.frames = frames
         self.currentFrame = 0
         self.timeBetweenFrames = 1/framerate
+        self.loop = loop
 
-    def play(self,leds) -> list:
+    def play(self,leds : neopixel.NeoPixel) -> list:
+        if self.loop == 0:
+            return
+        if self.loop > 0:
+            self.loop -= 1
         if self.currentFrame == len(self.frames):
             self.currentFrame = 0
         for index in range(len(leds)):
             leds[index] = self.frames[self.currentFrame][index]
+        leds.show()
         self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
 
@@ -31,8 +37,8 @@ class bluetoinumContainer:
         self.soundDir = "sounds/"
         self.active = True
         self.currentAnimation = None
-        self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1)
-        self.commands = [self.fill,self.testAnimation,self.stop]
+        self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1,auto_write=False)
+        self.commands = [self.fill,self.testAnimation,self.stop,self.anyAnimation]
         self.stopCurrentAnimation = False    
         self.currentSound = None
     
@@ -45,7 +51,7 @@ class bluetoinumContainer:
                         self.currentSound = pygame.mixer.Sound(self.soundDir + data["sound"])
                     except FileNotFoundError:
                         return "Sound file not found"
-                return animation(data["frames"], data["framerate"])
+                return animation(data["frames"], data["framerate"],data["loop"])
         except FileNotFoundError as fnfe:
             return f"Animation file not found {fnfe.filename}"
         
@@ -75,9 +81,11 @@ class bluetoinumContainer:
         else:
             return selectedAnimation
 
-    def log(self,message : str):
+    def pieceOfWood(self,message : str):
         with open("log.txt","at") as file:
             file.write(message + "\n")
+
+    
     
     def start(self):
         print("starting")
@@ -87,7 +95,7 @@ class bluetoinumContainer:
         while self.active:
             try:
                 conn, address = server.accept()
-                self.log(f"accepting connection from {address}")
+                self.pieceOfWood(f"accepting connection from {address}")
                 while True:
                     data = conn.recv(1024)
                     if data == None:
@@ -110,7 +118,7 @@ class bluetoinumContainer:
                     else:
                         conn.send("Command not found".encode()) 
             except Exception as e:
-               self.log(f"ERROR : {e}")
+               self.pieceOfWood(f"ERROR : {e}")
         server.close()
 
     def fill(self,color):
