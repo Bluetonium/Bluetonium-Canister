@@ -8,6 +8,7 @@ import board
 import neopixel
 import pygame.mixer
 import json
+import RPi.GPIO as GPIO
 
 class animation:
     def __init__(self, frames, framerate):
@@ -26,21 +27,26 @@ class animation:
 
 class bluetoinumContainer:
     def __init__(self):
+        self.DIR = "/home/bluetonium/CanisterCode/"
         self.LED_COUNT = 50
         self.LED_PIN = board.D10
         self.MAIN_LED_PIN = 6
         self.PORT = 5
         self.ADDRESS = "B8:27:EB:55:55:59"
-        self.animationDir = "animations/"
-        self.soundDir = "sounds/"
+        self.animationDir = self.DIR + "animations/"
+        self.soundDir = self.DIR + "sounds/"
         self.active = True
         self.currentAnimation = None
         self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1)
-        self.commands = [self.meltdown,self.fill,self.testAnimation,self.stop]
+        self.commands = [self.killCurrentAnimation,self.fill,self.stop,self.setMainLed,self.getMainLed]#default commands
         self.stopCurrentAnimation = False
         self.currentSound = None
-
         self.mainLedStatus = True# be on by default
+
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.MAIN_LED_PIN,GPIO.OUT)
+        GPIO.output(self.MAIN_LED_PIN,GPIO.HIGH)
+        self.leds.fill((0,0,0))
 
     def loadAnimation(self, fileName : str) -> animation:
         try:
@@ -59,16 +65,6 @@ class bluetoinumContainer:
         while not self.stopCurrentAnimation:
             currentAnimation.play(self.leds)
 
-    def killCurrentAnimation(self):
-        if self.currentAnimation is None or not self.currentAnimation.is_alive:
-            return
-        self.stopCurrentAnimation = True
-        if self.currentSound is not None:
-            self.currentSound.stop()
-            self.currentSound = None
-        self.currentAnimation.join()
-        self.stopCurrentAnimation = False
-        
     def startAnimation(self, fileName : str) -> str:
         self.killCurrentAnimation()
         selectedAnimation = self.loadAnimation(fileName)
@@ -82,7 +78,7 @@ class bluetoinumContainer:
             return selectedAnimation
 
     def log(self,message : str):
-        with open("log.txt","at") as file:
+        with open(self.DIR + "log.txt","at") as file:
             file.write(message + "\n")
 
     def start(self):
@@ -110,35 +106,66 @@ class bluetoinumContainer:
                                 response = command(*args)
                                 if response is None:
                                     response = "OK"
+                            except TypeError as te:
+                                response = "Incorrect number of arguments"
                             except Exception as exceptionMessage:
                                 response = str(exceptionMessage)
                             conn.send(response.encode())
                             break
                     else:
-                        conn.send("Command not found".encode()) 
+                        conn.send("Command not found".encode())
             except Exception as e:
                self.log(f"ERROR : {e}")
         server.close()
 
-    def meltdown(self) -> str:
-        return self.startAnimation("meltdown")
+    def commmand(self, command : function) -> str:
+        self.commands.append(command)
 
-    def fill(self,color):
+    def killCurrentAnimation(self):
+        if self.currentAnimation is None or not self.currentAnimation.is_alive:
+            return "No current animation"
+        self.stopCurrentAnimation = True
+        if self.currentSound is not None:
+            self.currentSound.stop()
+            self.currentSound = None
+        self.currentAnimation.join()
+        self.stopCurrentAnimation = False
+
+    def fill(self,color) -> str:
         self.leds.fill(tuple(color))
         return "OK"
 
-    def testAnimation(self):
-        return self.startAnimation("test.json")
-
-    def stop(self):
+    def stop(self) -> str:
         self.killCurrentAnimation()
         self.active = False
         return "OK"
 
+    def setMainLed(self, status : bool) -> str:
+        if status:
+            GPIO.output(self.MAIN_LED_PIN,GPIO.HIGH)
+            self.mainLedStatus = True
+        else:
+            GPIO.output(self.MAIN_LED_PIN,GPIO.LOW)
+            self.mainLedStatus = False
+        return "OK"
 
-if __name__ == "__main__":
-    pygame.mixer.init()
-    thing = bluetoinumContainer()
-    thing.start()
+    def getMainLed(self) -> str:
+        if self.mainLedStatus:
+            return "Main LED on"
+        else:
+            return "Main LED off"
 
-    thing.leds.fill((0,0,0))
+
+#the real stuff here
+can = bluetoinumContainer()
+pygame.mixer.init()
+
+@can.command
+def meltdown(canister : bluetoinumContainer):
+    return canister.startAnimation("meltdown")
+
+@can.commmand
+def testAnimation(canister : bluetoinumContainer):
+    return canister.startAnimation("test.json")
+
+can.start()
