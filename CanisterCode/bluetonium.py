@@ -38,7 +38,7 @@ class bluetoinumContainer:
         self.active = True
         self.currentAnimation = None
         self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1)
-        self.commands = [self.killCurrentAnimation,self.fill,self.stop,self.setMainLed,self.getMainLed]#default commands
+        self.commands = []
         self.stopCurrentAnimation = False
         self.currentSound = None
         self.mainLedStatus = True# be on by default
@@ -99,11 +99,12 @@ class bluetoinumContainer:
                     print(f"recived command {data}")
                     if data == "quit":
                         break
+                    commandName = data.split(",")[0]
                     for command in self.commands:
-                        if command.__name__ == data:
+                        if command.__name__ == commandName:
                             try:
                                 args = data.split(',')[1:]
-                                response = command(*args)
+                                response = command(self,*args)
                                 if response is None:
                                     response = "OK"
                             except TypeError as te:
@@ -118,7 +119,7 @@ class bluetoinumContainer:
                self.log(f"ERROR : {e}")
         server.close()
 
-    def commmand(self, command : function) -> str:
+    def command(self, command) -> str:
         self.commands.append(command)
 
     def killCurrentAnimation(self):
@@ -131,29 +132,6 @@ class bluetoinumContainer:
         self.currentAnimation.join()
         self.stopCurrentAnimation = False
 
-    def fill(self,color) -> str:
-        self.leds.fill(tuple(color))
-        return "OK"
-
-    def stop(self) -> str:
-        self.killCurrentAnimation()
-        self.active = False
-        return "OK"
-
-    def setMainLed(self, status : bool) -> str:
-        if status:
-            GPIO.output(self.MAIN_LED_PIN,GPIO.HIGH)
-            self.mainLedStatus = True
-        else:
-            GPIO.output(self.MAIN_LED_PIN,GPIO.LOW)
-            self.mainLedStatus = False
-        return "OK"
-
-    def getMainLed(self) -> str:
-        if self.mainLedStatus:
-            return "Main LED on"
-        else:
-            return "Main LED off"
 
 
 #the real stuff here
@@ -164,8 +142,57 @@ pygame.mixer.init()
 def meltdown(canister : bluetoinumContainer):
     return canister.startAnimation("meltdown")
 
-@can.commmand
+@can.command
 def testAnimation(canister : bluetoinumContainer):
     return canister.startAnimation("test.json")
+
+@can.command
+def fill(canister : bluetoinumContainer, color):
+    canister.leds.fill(tuple(color))
+    return "OK"
+
+@can.command
+def setMainLed(canister : bluetoinumContainer, mode : str) -> str:
+        mode = mode.lower()
+        if mode == "on":
+            GPIO.output(canister.MAIN_LED_PIN,GPIO.HIGH)
+            canister.mainLedStatus = True
+            return "OK"
+        elif mode == "off":
+            GPIO.output(canister.MAIN_LED_PIN,GPIO.LOW)
+            canister.mainLedStatus = False
+            return "OK"
+        return "not a valid led state"
+
+@can.command
+def getMainLed(canister : bluetoinumContainer):
+    if canister.mainLedStatus:
+        return "Main LED on"
+    else:
+        return "Main LED off"
+
+@can.command
+def setMainLed(canister : bluetoinumContainer, status : bool) -> str:
+        if status:
+            GPIO.output(canister.MAIN_LED_PIN,GPIO.HIGH)
+            canister.mainLedStatus = True
+        else:
+            GPIO.output(canister.MAIN_LED_PIN,GPIO.LOW)
+            canister.mainLedStatus = False
+        return "OK"
+
+@can.command
+def stop(canister : bluetoinumContainer) -> str:
+    canister.killCurrentAnimation()
+    canister.active = False
+    return "OK"
+
+@can.command
+def killAnimation(canister : bluetoinumContainer):
+    return canister.killCurrentAnimation()
+
+@can.command
+def help(canister : bluetoinumContainer):
+    return "Commands : " + ",".join([x.__name__ for x in canister.commands])
 
 can.start()
