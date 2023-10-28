@@ -11,10 +11,11 @@ import json
 import RPi.GPIO as GPIO
 
 class animation:
-    def __init__(self, frames, framerate):
+    def __init__(self, frames, framerate, name):
         self.frames = frames
         self.currentFrame = 0
         self.timeBetweenFrames = 1/framerate
+        self.animationName = name
 
     def play(self,leds) -> list:
         if self.currentFrame == len(self.frames):
@@ -23,6 +24,9 @@ class animation:
             leds[index] = self.frames[self.currentFrame][index]
         self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
+
+    def getName(self) -> str:
+        return self.animationName
 
 
 class bluetoinumContainer:
@@ -172,16 +176,6 @@ def getMainLed(canister : bluetoinumContainer):
         return "Main LED off"
 
 @can.command
-def setMainLed(canister : bluetoinumContainer, status : bool) -> str:
-        if status:
-            GPIO.output(canister.MAIN_LED_PIN,GPIO.HIGH)
-            canister.mainLedStatus = True
-        else:
-            GPIO.output(canister.MAIN_LED_PIN,GPIO.LOW)
-            canister.mainLedStatus = False
-        return "OK"
-
-@can.command
 def stop(canister : bluetoinumContainer) -> str:
     canister.killCurrentAnimation()
     canister.active = False
@@ -190,6 +184,13 @@ def stop(canister : bluetoinumContainer) -> str:
 @can.command
 def killAnimation(canister : bluetoinumContainer):
     return canister.killCurrentAnimation()
+
+@can.command
+def getCurrentAnimation(canister : bluetoinumContainer):
+    if canister.currentAnimation is None or not canister.currentAnimation.is_alive:
+        return "No active animation"
+    else:
+        return f"current animation : {canister.currentAnimation.getName()}"
 
 @can.command
 def help(canister : bluetoinumContainer):
