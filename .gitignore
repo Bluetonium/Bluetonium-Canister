@@ -1,7 +1,0 @@
-/PhoneApp/Bluetonium App/library
-/PhoneApp/Bluetonium App/Logs
-/PhoneApp/Bluetonium App/Packages
-/PhoneApp/Bluetonium App/Temp
-*.csproj
-*.logs
-*.apk
