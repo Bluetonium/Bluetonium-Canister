@@ -25,6 +25,9 @@ class animation:
         self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
 
+    def muteAudio(self, muted : bool):
+        pass
+
     def getName(self) -> str:
         return self.animationName
 
@@ -52,14 +55,19 @@ class bluetoinumContainer:
         GPIO.output(self.MAIN_LED_PIN,GPIO.HIGH)
         self.leds.fill((0,0,0))
 
+    def loadSound(self, soundFile : str) -> bool:
+        try:
+            self.currentSound = pygame.mixer.Sound(self.soundDir + soundFile)
+            True
+        except FileNotFoundError:
+            return False
+
     def loadAnimation(self, fileName : str) -> animation:
         try:
             with open(f"{self.animationDir}{fileName}") as file:
                 data = json.load(file)
                 if data["sound"] != "":
-                    try:
-                        self.currentSound = pygame.mixer.Sound(self.soundDir + data["sound"])
-                    except FileNotFoundError:
+                    if not self.loadSound(data["sound"]):
                         return "Sound file not found"
                 return animation(data["frames"], data["framerate"])
         except FileNotFoundError as fnfe:
@@ -108,7 +116,7 @@ class bluetoinumContainer:
                         if command.__name__ == commandName:
                             try:
                                 args = data.split(',')[1:]
-                                response = command(self,*args)
+                                response = command(self,*[eval(x) for x in args])#idc that its insecure, its easy
                                 if response is None:
                                     response = "OK"
                             except TypeError as te:
@@ -152,21 +160,18 @@ def testAnimation(canister : bluetoinumContainer):
 
 @can.command
 def fill(canister : bluetoinumContainer, color):
-    canister.leds.fill(tuple(color))
+    canister.leds.fill(color)
     return "OK"
 
 @can.command
-def setMainLed(canister : bluetoinumContainer, mode : str) -> str:
-        mode = mode.lower()
-        if mode == "on":
+def setMainLed(canister : bluetoinumContainer, mode : bool) -> str:
+        if mode:
             GPIO.output(canister.MAIN_LED_PIN,GPIO.HIGH)
             canister.mainLedStatus = True
-            return "OK"
-        elif mode == "off":
+        else:
             GPIO.output(canister.MAIN_LED_PIN,GPIO.LOW)
             canister.mainLedStatus = False
-            return "OK"
-        return "not a valid led state"
+        return "OK"
 
 @can.command
 def getMainLed(canister : bluetoinumContainer):
@@ -194,6 +199,35 @@ def getCurrentAnimation(canister : bluetoinumContainer):
 
 @can.command
 def help(canister : bluetoinumContainer):
-    return "Commands : " + ",".join([x.__name__ for x in canister.commands])
+    return "Commands : " + ", ".join([x.__name__ for x in canister.commands])
+
+@can.command
+def getAnimationList(canister : bluetoinumContainer):
+    return ", ".join(os.listdir(canister.animationDir))
+
+@can.command
+def getSoundList(canister : bluetoinumContainer):
+    return ", ".join(os.listdir(canister.soundDir))
+
+@can.command
+def playSound(canister : bluetoinumContainer, soundFile : str):
+    if canister.loadSound(soundFile):
+        return "OK"
+    return "Sound file not found"
+
+@can.command
+def mute(canister : bluetoinumContainer, mute : bool = True):#technically not muting, but shutup
+    if canister.currentSound is None:
+        return "OK"
+    if mute:
+        pygame.mixer.pause()
+    else:
+        pygame.mixer.unpause()
+    return "OK"
+
+@can.command
+def setVolume(canister : bluetoinumContainer, volume : float):#note only sets for the current sound, fix that later
+    if canister.currentSound is not None:
+        canister.currentSound.set_volume(volume)
 
 can.start()
