@@ -2,8 +2,7 @@
 code for the canister containing a crystal of bluetonium
 
 ## notes
-  - muting is a lie, it just pauses
-  - this is janky
+  - the raspberry pi zero is on the bottom but you actually put on the top bc of how the pins are
   - login for pi username:bluetonium password:password
 
 ## to do
