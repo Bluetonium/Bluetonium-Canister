@@ -10,26 +10,19 @@ import pygame.mixer
 import json
 
 class animation:
-    def __init__(self, frames, framerate, name):
+    def __init__(self, frames, framerate):
         self.frames = frames
         self.currentFrame = 0
         self.timeBetweenFrames = 1/framerate
-        self.animationName = name
 
-    def play(self,leds) -> list:
+    def play(self,leds : neopixel.NeoPixel) -> list:
         if self.currentFrame == len(self.frames):
             self.currentFrame = 0
         for index in range(len(leds)):
             leds[index] = self.frames[self.currentFrame][index]
+        leds.show()
         self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
-
-    def muteAudio(self, muted : bool):
-        pass
-
-    def getName(self) -> str:
-        return self.animationName
-
 
 class bluetoinumContainer:
     def __init__(self):
@@ -42,20 +35,20 @@ class bluetoinumContainer:
         self.soundDir = self.DIR + "sounds/"
         self.active = True
         self.currentAnimation = None
-        self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1)
+        self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1,auto_write=False)
+        self.leds.fill((0,0,0))
         self.commands = []
         self.stopCurrentAnimation = False
-        self.defaultAnimationPresent = os.path.isfile(self.DIR + self.animationDir + "default.json")
+        self.defaultAnimationPresent = os.path.isfile(self.DIR + self.animationDir + "default.json")#check for default animation
         self.currentAnimationName = None
         self.currentVolume = 1
         self.shutdown = False # shutdown after stopping
-
-        #check for the default        
 
     def loadSound(self, soundFile : str) -> bool:
         try:
             pygame.mixer.music.load(self.soundDir + soundFile)
             pygame.mixer.music.set_volume(self.currentVolume)
+            pygame.mixer.music.play()
             return True
         except FileNotFoundError:
             return False
@@ -95,14 +88,17 @@ class bluetoinumContainer:
     def start(self) -> None:
         if self.defaultAnimationPresent:
             self.startAnimation("default.json")
+            self.log("loading default animation")
+        else:
+            self.log("no default animation loaded")
         print("starting")
         server = socket.socket(socket.AF_BLUETOOTH,socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         server.bind((self.ADDRESS,self.PORT))
         server.listen(2)
         print("listening")
-        while self.active:   
+        while self.active:
             conn, address = server.accept()
-            with conn:
+            try:
                 self.log(f"accepting connection from {address}")
                 while True:
                     data = conn.recv(1024)
@@ -110,23 +106,31 @@ class bluetoinumContainer:
                         break
                     try:
                         data = json.loads(data.decode())
+                        print(data)
                         commandName = data["command"]
-                        self.log("Command : {command}")
+                        self.log(f"Command : {commandName}")
                         for command in self.commands:
+                            print(f"checking command {command.__name__}")
                             if command.__name__ == commandName:
                                 args = data["args"]
                                 response = command(self, *args)#thank you json
                                 if response is None:
                                     response = "OK"
-                            break
+                                    print("no response")
+                                else:
+                                    print("some response got")
+                                    print(f"we got a response {response}")
+                                break
                         else:
+                            print("couldnt even find thecommand")
                             response = "Command not found"
-                    except TypeError as te:
-                        response = "Incorrect command format"
+                        conn.send(response.encode())
+                    except TypeError:
+                        conn.send("Incorrect command format".encode())
                     except Exception as exceptionMessage:
-                        response = str(exceptionMessage)
-                    finally:
-                         conn.send(response.encode())
+                        conn.send(f"Error has occured {exceptionMessage}".encode())
+            except Exception as e:
+                self.log(f"ERROR : {e}")
         server.close()
         return self.shutdown
 
