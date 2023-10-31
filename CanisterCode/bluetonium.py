@@ -51,9 +51,9 @@ class bluetoinumContainer:
 
     def loadSound(self, soundFile : str) -> bool:
         try:
-            self.currentSound = pygame.mixer.Sound(self.soundDir + soundFile)
+            self.currentSound = pygame.mixer.Sound.load(self.soundDir + soundFile)
             self.currentSound.set_volume(self.currentVolume)
-            True
+            return True
         except FileNotFoundError:
             return False
 
