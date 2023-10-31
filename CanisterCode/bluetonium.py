@@ -107,26 +107,26 @@ class bluetoinumContainer:
                     data = conn.recv(1024)
                     if data == None:
                         continue
-                    data = data.decode()
-                    print(f"recived command {data}")
-                    if data == "quit":
-                        break
-                    commandName = data.split(",")[0]
-                    for command in self.commands:
-                        if command.__name__ == commandName:
-                            try:
-                                args = data.split(',')[1:]
-                                response = command(self,*[eval(x) for x in args])#idc that its insecure, its easy
+                    try:
+                        data = json.loads(data.decode())
+
+                        commandName = data["command"]
+                        self.log("Command : {command}")
+                        for command in self.commands:
+                            if command.__name__ == commandName:
+                                args = data["args"]
+                                response = command(self, *args)#thank you json
                                 if response is None:
                                     response = "OK"
-                            except TypeError as te:
-                                response = "Incorrect number of arguments"
-                            except Exception as exceptionMessage:
-                                response = str(exceptionMessage)
-                            conn.send(response.encode())
                             break
-                    else:
-                        conn.send("Command not found".encode())
+                        else:
+                            response = "Command not found"
+                    except TypeError as te:
+                        response = "Incorrect command format"
+                    except Exception as exceptionMessage:
+                        response = str(exceptionMessage)
+                    finally:
+                         conn.send(response.encode())
             except Exception as e:
                self.log(f"ERROR : {e}")
         server.close()
