@@ -45,65 +45,71 @@ class bluetoinumContainer:
         self.leds = neopixel.NeoPixel(self.LED_PIN,self.LED_COUNT,brightness=1)
         self.commands = []
         self.stopCurrentAnimation = False
-        self.currentSound = None
+        self.defaultAnimationPresent = os.path.isfile(self.DIR + self.animationDir + "default.json")
+        self.currentAnimationName = None
         self.currentVolume = 1
-        self.leds.fill((0,0,0))
+        self.shutdown = False # shutdown after stopping
+
+        #check for the default        
 
     def loadSound(self, soundFile : str) -> bool:
         try:
-            self.currentSound = pygame.mixer.Sound.load(self.soundDir + soundFile)
-            self.currentSound.set_volume(self.currentVolume)
+            pygame.mixer.music.load(self.soundDir + soundFile)
+            pygame.mixer.music.set_volume(self.currentVolume)
             return True
         except FileNotFoundError:
             return False
 
     def loadAnimation(self, fileName : str) -> animation:
         try:
-            with open(f"{self.animationDir}{fileName}") as file:
+            with open(self.animationDir + fileName) as file:
                 data = json.load(file)
                 if data["sound"] != "":
                     if not self.loadSound(data["sound"]):
                         return "Sound file not found"
+                self.currentAnimation = fileName.removesuffix(".json")
                 return animation(data["frames"], data["framerate"])
         except FileNotFoundError as fnfe:
             return f"Animation file not found {fnfe.filename}"
 
-    def playAnimation(self, currentAnimation : animation):
+    def playAnimation(self, currentAnimation : animation, loop = -1):
         while not self.stopCurrentAnimation:
             currentAnimation.play(self.leds)
+        pygame.mixer.music.fadeout(500)
+        pygame.mixer.music.unload()
+        self.stopCurrentAnimation = False
 
     def startAnimation(self, fileName : str) -> str:
         self.killCurrentAnimation()
         selectedAnimation = self.loadAnimation(fileName)
         if isinstance(selectedAnimation,animation):
-            if self.currentSound is not None:
-                self.currentSound.play()
             self.currentAnimation = threading.Thread(target=self.playAnimation,args=(selectedAnimation,))
             self.currentAnimation.start()
             return "OK"
         else:
             return selectedAnimation
 
-    def log(self,message : str):
+    def log(self,message : str) -> None:
         print(message)
 
-    def start(self):
+    def start(self) -> None:
+        if self.defaultAnimationPresent:
+            self.startAnimation("default.json")
         print("starting")
         server = socket.socket(socket.AF_BLUETOOTH,socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         server.bind((self.ADDRESS,self.PORT))
         server.listen(2)
         print("listening")
-        while self.active:
-            try:
-                conn, address = server.accept()
+        while self.active:   
+            conn, address = server.accept()
+            with conn:
                 self.log(f"accepting connection from {address}")
                 while True:
                     data = conn.recv(1024)
-                    if data == None:
-                        continue
+                    if not data:
+                        break
                     try:
                         data = json.loads(data.decode())
-
                         commandName = data["command"]
                         self.log("Command : {command}")
                         for command in self.commands:
@@ -121,22 +127,22 @@ class bluetoinumContainer:
                         response = str(exceptionMessage)
                     finally:
                          conn.send(response.encode())
-            except Exception as e:
-               self.log(f"ERROR : {e}")
         server.close()
+        return self.shutdown
 
     def command(self, command) -> str:
         self.commands.append(command)
 
-    def killCurrentAnimation(self):
+    def killCurrentAnimation(self, playDefault = True) -> str:
         if self.currentAnimation is None or not self.currentAnimation.is_alive:
             return "No current animation"
         self.stopCurrentAnimation = True
-        if self.currentSound is not None:
-            self.currentSound.stop()
-            self.currentSound = None
         self.currentAnimation.join()
-        self.stopCurrentAnimation = False
+        if self.currentAnimationName != "default" and self.defaultAnimationPresent and playDefault:
+            self.startAnimation("default.json")
+        else:
+            self.currentAnimation = None
+            self.currentAnimationName = None
 
 
 #the real stuff here
@@ -158,9 +164,15 @@ def fill(canister : bluetoinumContainer, color):
 
 @can.command
 def stop(canister : bluetoinumContainer) -> str:
-    canister.killCurrentAnimation()
+    canister.killCurrentAnimation(playDefault=False)
     canister.active = False
     return "OK"
+
+@can.command
+def shutdown(canister : bluetoinumContainer) -> str:
+    canister.killCurrentAnimation(playDefault=False)
+    canister.active = False
+    canister.shutdown = True
 
 @can.command
 def killAnimation(canister : bluetoinumContainer):
@@ -193,19 +205,18 @@ def playSound(canister : bluetoinumContainer, soundFile : str):
 
 @can.command
 def mute(canister : bluetoinumContainer, mute : bool = True):#technically not muting, but shutup
-    if canister.currentSound is None:
-        return "OK"
     if mute:
-        pygame.mixer.pause()
+        pygame.mixer.music.pause()
     else:
-        pygame.mixer.unpause()
+        pygame.mixer.music.unpause()
     return "OK"
 
 @can.command
 def setVolume(canister : bluetoinumContainer, volume : float):
-    if canister.currentSound is not None:
-        canister.currentSound.set_volume(volume)
-        canister.currentVolume = volume
+    pygame.mixer.music.set_volume(volume)
+    canister.currentVolume = volume
 
-
-can.start()
+shutdown = can.start()
+print("stopping")
+if shutdown:
+    os.system("sudo shutdown -h now")
