@@ -8,7 +8,6 @@ import board
 import neopixel
 import pygame.mixer
 import json
-import RPi.GPIO as GPIO
 
 class animation:
     def __init__(self, frames, framerate, name):
@@ -37,7 +36,6 @@ class bluetoinumContainer:
         self.DIR = "/home/bluetonium/CanisterCode/"
         self.LED_COUNT = 50
         self.LED_PIN = board.D10
-        self.MAIN_LED_PIN = 6
         self.PORT = 5
         self.ADDRESS = "B8:27:EB:55:55:59"
         self.animationDir = self.DIR + "animations/"
@@ -48,16 +46,13 @@ class bluetoinumContainer:
         self.commands = []
         self.stopCurrentAnimation = False
         self.currentSound = None
-        self.mainLedStatus = True# be on by default
-
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.MAIN_LED_PIN,GPIO.OUT)
-        GPIO.output(self.MAIN_LED_PIN,GPIO.HIGH)
+        self.currentVolume = 1
         self.leds.fill((0,0,0))
 
     def loadSound(self, soundFile : str) -> bool:
         try:
             self.currentSound = pygame.mixer.Sound(self.soundDir + soundFile)
+            self.currentSound.set_volume(self.currentVolume)
             True
         except FileNotFoundError:
             return False
@@ -90,8 +85,7 @@ class bluetoinumContainer:
             return selectedAnimation
 
     def log(self,message : str):
-        with open(self.DIR + "log.txt","at") as file:
-            file.write(message + "\n")
+        print(message)
 
     def start(self):
         print("starting")
@@ -145,7 +139,6 @@ class bluetoinumContainer:
         self.stopCurrentAnimation = False
 
 
-
 #the real stuff here
 can = bluetoinumContainer()
 pygame.mixer.init()
@@ -162,23 +155,6 @@ def testAnimation(canister : bluetoinumContainer):
 def fill(canister : bluetoinumContainer, color):
     canister.leds.fill(color)
     return "OK"
-
-@can.command
-def setMainLed(canister : bluetoinumContainer, mode : bool) -> str:
-        if mode:
-            GPIO.output(canister.MAIN_LED_PIN,GPIO.HIGH)
-            canister.mainLedStatus = True
-        else:
-            GPIO.output(canister.MAIN_LED_PIN,GPIO.LOW)
-            canister.mainLedStatus = False
-        return "OK"
-
-@can.command
-def getMainLed(canister : bluetoinumContainer):
-    if canister.mainLedStatus:
-        return "Main LED on"
-    else:
-        return "Main LED off"
 
 @can.command
 def stop(canister : bluetoinumContainer) -> str:
@@ -226,9 +202,10 @@ def mute(canister : bluetoinumContainer, mute : bool = True):#technically not mu
     return "OK"
 
 @can.command
-def setVolume(canister : bluetoinumContainer, volume : float):#note only sets for the current sound, fix that later
+def setVolume(canister : bluetoinumContainer, volume : float):
     if canister.currentSound is not None:
         canister.currentSound.set_volume(volume)
+        canister.currentVolume = volume
 
 
 can.start()
