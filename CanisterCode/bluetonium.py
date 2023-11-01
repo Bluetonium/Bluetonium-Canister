@@ -48,7 +48,7 @@ class bluetoinumContainer:
         try:
             pygame.mixer.music.load(self.soundDir + soundFile)
             pygame.mixer.music.set_volume(self.currentVolume)
-            pygame.mixer.music.play()
+            pygame.mixer.music.play(loops=-1)
             return True
         except FileNotFoundError:
             return False
@@ -187,7 +187,7 @@ def getCurrentAnimation(canister : bluetoinumContainer):
     if canister.currentAnimation is None or not canister.currentAnimation.is_alive:
         return "No active animation"
     else:
-        return f"current animation : {canister.currentAnimation.getName()}"
+        return f"current animation : {canister.currentAnimationName}"
 
 @can.command
 def help(canister : bluetoinumContainer):
@@ -219,6 +219,10 @@ def mute(canister : bluetoinumContainer, mute : bool = True):#technically not mu
 def setVolume(canister : bluetoinumContainer, volume : float):
     pygame.mixer.music.set_volume(volume)
     canister.currentVolume = volume
+
+@can.command
+def playAnimation(canister : bluetoinumContainer, animation):
+    return canister.startAnimation(animation)
 
 shutdown = can.start()
 print("stopping")
