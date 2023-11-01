@@ -10,19 +10,29 @@ import pygame.mixer
 import json
 
 class animation:
-    def __init__(self, frames, framerate):
+    def __init__(self, frames, framerate, loop = -1, repeatOnLoop = False):
         self.frames = frames
         self.currentFrame = 0
         self.timeBetweenFrames = 1/framerate
+        self.loop = loop
+        self.repeatOnLoop = repeatOnLoop
 
-    def play(self,leds : neopixel.NeoPixel) -> list:
+    def play(self,leds : neopixel.NeoPixel):
         if self.currentFrame == len(self.frames):
             self.currentFrame = 0
+            if self.loop != -1:
+                if self.loop > 0:
+                    self.loop -= 1
+                else:
+                    return False
+            if self.repeatOnLoop:
+                pygame.mixer.music.rewind()
         for index in range(len(leds)):
             leds[index] = self.frames[self.currentFrame][index]
         leds.show()
         self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
+        return True
 
 class bluetoinumContainer:
     def __init__(self):
@@ -61,15 +71,17 @@ class bluetoinumContainer:
                     if not self.loadSound(data["sound"]):
                         return "Sound file not found"
                 self.currentAnimation = fileName.removesuffix(".json")
-                return animation(data["frames"], data["framerate"])
+                return animation(data["frames"], data["framerate"],data["loops"],data["repeatOnLoop"])
         except FileNotFoundError as fnfe:
             return f"Animation file not found {fnfe.filename}"
 
     def playAnimation(self, currentAnimation : animation, loop = -1):
         while not self.stopCurrentAnimation:
-            currentAnimation.play(self.leds)
-        pygame.mixer.music.fadeout(500)
-        pygame.mixer.music.unload()
+            if not currentAnimation.play(self.leds):
+                    pygame.mixer.music.fadeout(500)
+                    pygame.mixer.music.unload()
+                    self.killCurrentAnimation()
+                    break
         self.stopCurrentAnimation = False
 
     def startAnimation(self, fileName : str) -> str:
@@ -141,7 +153,7 @@ class bluetoinumContainer:
         if self.currentAnimation is None or not self.currentAnimation.is_alive:
             return "No current animation"
         self.stopCurrentAnimation = True
-        self.currentAnimation.join()
+        #self.currentAnimation.join()#makes looping suck if this is on and i dont think we need
         if self.currentAnimationName != "default" and self.defaultAnimationPresent and playDefault:
             self.startAnimation("default.json")
         else:
