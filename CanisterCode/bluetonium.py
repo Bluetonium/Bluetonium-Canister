@@ -8,7 +8,6 @@ import board
 import neopixel
 import pygame.mixer
 import json
-
 class animation:
     def __init__(self, frames, framerate, loop = -1, repeatOnLoop = False):
         self.frames = frames
@@ -49,7 +48,7 @@ class bluetoinumContainer:
         self.leds.fill((0,0,0))
         self.commands = []
         self.stopCurrentAnimation = False
-        self.defaultAnimationPresent = os.path.isfile(self.DIR + self.animationDir + "default.json")#check for default animation
+        self.defaultAnimationPresent = os.path.isfile(self.animationDir + "default.json")#check for default animation
         self.currentAnimationName = None
         self.currentVolume = 1
         self.shutdown = False # shutdown after stopping
@@ -99,16 +98,15 @@ class bluetoinumContainer:
             file.write(message)
 
     def start(self) -> None:
+        self.log("starting")
         if self.defaultAnimationPresent:
             self.startAnimation("default.json")
             self.log("loading default animation")
         else:
             self.log("no default animation loaded")
-        print("starting")
         server = socket.socket(socket.AF_BLUETOOTH,socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         server.bind((self.ADDRESS,self.PORT))
         server.listen(2)
-        print("listening")
         while self.active:
             conn, address = server.accept()
             try:
