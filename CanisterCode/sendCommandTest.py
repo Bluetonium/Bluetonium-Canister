@@ -8,3 +8,4 @@ while True:
     print(client.recv(1024).decode())
     if yeah == "stop":
         client.close()
+        break

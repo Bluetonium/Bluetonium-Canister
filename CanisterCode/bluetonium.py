@@ -95,7 +95,7 @@ class bluetoinumContainer:
             return selectedAnimation
 
     def log(self,message : str) -> None:
-        print(message)
+        with open(self.DIR)
 
     def start(self) -> None:
         if self.defaultAnimationPresent:
