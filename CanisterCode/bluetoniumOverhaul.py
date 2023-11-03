@@ -1,4 +1,4 @@
-# bluetonium overhaul
+#!/usr/bin/python
 
 import time
 import os
@@ -121,7 +121,7 @@ class bluetoinumContainer:
 
     def animationPlayer(self):
         while self.active:
-            self.currentAnimation.play()
+            self.currentAnimation.play(self.leds)
         mixer.music.unload()
 
     def log(self, message: str) -> None:
