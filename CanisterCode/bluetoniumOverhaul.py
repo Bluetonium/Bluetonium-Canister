@@ -8,7 +8,7 @@ import board
 import neopixel
 from pygame import mixer
 import json
-
+from datetime import datetime
 
 class animation:
     def __init__(self, frames: list, audio: str, framerate: int, name: str, loop: int = -1, repeatOnLoop: bool = False):
@@ -21,14 +21,14 @@ class animation:
         self.audio = audio
         self.name = name
 
-    def play(self, leds: neopixel.NeoPixel):
+    def play(self, leds: neopixel.NeoPixel) -> bool:
         if self.loop == 0:
-            return
+            return True
 
         if not self.hasPlayed:
+            mixer.music.unload()#change if want sound to keep playing when new animation started
+            mixer.music.fadeout(500)
             if len(self.audio) != 0:
-                mixer.music.unload()
-                mixer.music.fadeout(500)
                 mixer.music.load(self.audio)
                 mixer.music.play()
             self.hasPlayed = True
@@ -45,6 +45,7 @@ class animation:
         leds.show()
         self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
+        return False
 
     def getName(self) -> str:
         return self.name
@@ -70,12 +71,13 @@ class bluetoinumContainer:
         self.shutdownAfterStop = False
 
         if self.defaultAnimationPresent:
-            default = self.currentAnimation = self.loadAnimation(
-                "default.json")
+            default = self.loadAnimation("default.json")
             if not isinstance(default, animation):
                 self.log("Error starting default")
                 self.loadEmptyAnimation()
                 self.defaultAnimationPresent = False
+            else:
+                self.currentAnimation = default
 
         self.animationHandler = threading.Thread(
             target=self.animationPlayer, args=[])
@@ -102,7 +104,6 @@ class bluetoinumContainer:
                         for command in self.commands:
                             if command.__name__ == commandName:
                                 args = data["args"]
-                                # thank you json
                                 response = command(self, *args)
                                 break
                         else:
@@ -121,12 +122,19 @@ class bluetoinumContainer:
 
     def animationPlayer(self):
         while self.active:
-            self.currentAnimation.play(self.leds)
+            finished = self.currentAnimation.play(self.leds)
+            if finished:
+                if self.defaultAnimationPresent:
+                    self.startAnimation("default.json")
+                else:
+                    self.loadEmptyAnimation()
         mixer.music.unload()
 
     def log(self, message: str) -> None:
         with open(self.DIR + "log.txt", "a") as file:
-            file.write(message)
+            currentTime = datetime.now().strftime("%D %H:%M:%S")
+            file.write(f"{currentTime} : {message}")
+
 
     def stopCurrentAnimation(self, loadDefault=True):
         if loadDefault and self.defaultAnimationPresent and self.currentAnimation.getName() != "default":
@@ -139,6 +147,7 @@ class bluetoinumContainer:
             with open(self.animationDir + fileName) as file:
                 data = json.load(file)
                 if data["sound"] != "" and os.path.isfile(self.soundDir + data["sound"]):
+                    print("Sound not found at " + self.soundDir + data["sound"])
                     return "Sound file not found"
                 return animation(data["frames"], data["sound"], data["framerate"], fileName.removesuffix(".json"), data["loops"], data["repeatOnLoop"])
         except FileNotFoundError as fnfe:
@@ -228,15 +237,6 @@ def playSound(canister: bluetoinumContainer, soundFile: str):
         mixer.music.unload()
         mixer.music.load(canister.soundDir + soundFile)
         mixer.music.play()
-
-
-@can.command
-def mute(canister: bluetoinumContainer, mute: bool = True):  # technically not muting, but shutup
-    if mute:
-        mixer.music.pause()
-    else:
-        mixer.music.unpause()
-    return "OK"
 
 
 @can.command
