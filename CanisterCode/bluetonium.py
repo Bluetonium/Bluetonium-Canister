@@ -6,34 +6,52 @@ import socket
 import threading
 import board
 import neopixel
-import pygame.mixer
+from pygame import mixer
 import json
+from datetime import datetime
 
 
 class animation:
-    def __init__(self, frames, framerate, loop=-1, repeatOnLoop=False):
+    def __init__(self, frames: list, audio: str, framerate: int, name: str, loop: int = -1, repeatOnLoop: bool = False):
         self.frames = frames
         self.currentFrame = 0
         self.timeBetweenFrames = 1/framerate
         self.loop = loop
         self.repeatOnLoop = repeatOnLoop
+        self.hasPlayed = False
+        self.audio = audio
+        self.name = name
 
-    def play(self, leds: neopixel.NeoPixel):
-        if self.currentFrame == len(self.frames):
+    def play(self, leds: neopixel.NeoPixel) -> bool:
+        if self.loop == 0:
+            return True
+
+        if not self.hasPlayed:
+            mixer.music.unload()  # change if want sound to keep playing when new animation started
+            mixer.music.fadeout(500)
+            if len(self.audio) != 0:
+                # meh hard coded, how sad, fix later
+                mixer.music.load(
+                    "/home/bluetonium/CanisterCode/sounds/" + self.audio)
+                mixer.music.play()
+            self.hasPlayed = True
+
+        if self.currentFrame >= len(self.frames):
             self.currentFrame = 0
             if self.loop != -1:
-                if self.loop > 0:
-                    self.loop -= 1
-                else:
-                    return False
+                self.loop -= 1
             if self.repeatOnLoop:
-                pygame.mixer.music.rewind()
+                mixer.music.rewind()
+
         for index in range(len(leds)):
             leds[index] = self.frames[self.currentFrame][index]
         leds.show()
         self.currentFrame += 1
         time.sleep(self.timeBetweenFrames)
-        return True
+        return False
+
+    def getName(self) -> str:
+        return self.name
 
 
 class bluetoinumContainer:
@@ -51,66 +69,24 @@ class bluetoinumContainer:
             self.LED_PIN, self.LED_COUNT, brightness=1, auto_write=False)
         self.leds.fill((0, 0, 0))
         self.commands = []
-        self.stopCurrentAnimation = False
         self.defaultAnimationPresent = os.path.isfile(
-            self.animationDir + "default.json")  # check for default animation
-        self.currentAnimationName = None
-        self.currentVolume = 1
-        self.shutdown = False  # shutdown after stopping
+            self.animationDir + "default.json")
+        self.shutdownAfterStop = False
 
-    def loadSound(self, soundFile: str) -> bool:
-        try:
-            pygame.mixer.music.load(self.soundDir + soundFile)
-            pygame.mixer.music.set_volume(self.currentVolume)
-            pygame.mixer.music.play(loops=-1)
-            return True
-        except FileNotFoundError:
-            return False
+        if self.defaultAnimationPresent:
+            default = self.loadAnimation("default.json")
+            if not isinstance(default, animation):
+                self.log("Error starting default")
+                self.loadEmptyAnimation()
+                self.defaultAnimationPresent = False
+            else:
+                self.currentAnimation = default
 
-    def loadAnimation(self, fileName: str) -> animation:
-        try:
-            with open(self.animationDir + fileName) as file:
-                data = json.load(file)
-                if data["sound"] != "":
-                    if not self.loadSound(data["sound"]):
-                        return "Sound file not found"
-                self.currentAnimation = fileName.removesuffix(".json")
-                return animation(data["frames"], data["framerate"], data["loops"], data["repeatOnLoop"])
-        except FileNotFoundError as fnfe:
-            return f"Animation file not found {fnfe.filename}"
-
-    def playAnimation(self, currentAnimation: animation, loop=-1):
-        while not self.stopCurrentAnimation:
-            if not currentAnimation.play(self.leds):
-                pygame.mixer.music.fadeout(500)
-                pygame.mixer.music.unload()
-                self.killCurrentAnimation()
-                break
-        self.stopCurrentAnimation = False
-
-    def startAnimation(self, fileName: str) -> str:
-        self.killCurrentAnimation()
-        self.currentAnimationName = fileName
-        selectedAnimation = self.loadAnimation(fileName)
-        if isinstance(selectedAnimation, animation):
-            self.currentAnimation = threading.Thread(
-                target=self.playAnimation, args=(selectedAnimation,))
-            self.currentAnimation.start()
-            return "OK"
-        else:
-            return selectedAnimation
-
-    def log(self, message: str) -> None:
-        with open(self.DIR + "log.txt", "a") as file:
-            file.write(message)
+        self.animationHandler = threading.Thread(
+            target=self.animationPlayer, args=[])
 
     def start(self) -> None:
-        self.log("starting")
-        if self.defaultAnimationPresent:
-            self.startAnimation("default.json")
-            self.log("loading default animation")
-        else:
-            self.log("no default animation loaded")
+        self.animationHandler.start()
         server = socket.socket(socket.AF_BLUETOOTH,
                                socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         server.bind((self.ADDRESS, self.PORT))
@@ -131,7 +107,6 @@ class bluetoinumContainer:
                         for command in self.commands:
                             if command.__name__ == commandName:
                                 args = data["args"]
-                                # thank you json
                                 response = command(self, *args)
                                 break
                         else:
@@ -146,28 +121,66 @@ class bluetoinumContainer:
             except Exception as e:
                 self.log(f"ERROR : {e}")
         server.close()
-        return self.shutdown
+        return self.shutdownAfterStop
+
+    def animationPlayer(self):
+        while self.active:
+            finished = self.currentAnimation.play(self.leds)
+            if finished:
+                if self.defaultAnimationPresent:
+                    self.startAnimation("default.json")
+                else:
+                    self.loadEmptyAnimation()
+        mixer.music.unload()
+
+    def log(self, message: str) -> None:
+        with open(self.DIR + "log.txt", "a") as file:
+            currentTime = datetime.now().strftime("%D %H:%M:%S")
+            file.write(f"{currentTime} : {message}\n")
+
+    def stopCurrentAnimation(self, loadDefault=True):
+        print("lets try to stop the animation")
+        if loadDefault and self.defaultAnimationPresent and self.currentAnimation.getName() != "default":
+            self.startAnimation("default.json")
+            print("loading default")
+            print(f"current {self.currentAnimation.getName()}")
+        else:
+            self.loadEmptyAnimation()
+            print("loading empty")
+            print(f"current {self.currentAnimation.getName()}")
+        return "OK"
+
+    def loadAnimation(self, fileName: str) -> animation:
+        try:
+            with open(self.animationDir + fileName) as file:
+                data = json.load(file)
+                if data["sound"] != "" and not os.path.isfile(self.soundDir + data["sound"]):
+                    print("Sound not found at " +
+                          self.soundDir + data["sound"])
+                    return "Sound file not found"
+                return animation(data["frames"], data["sound"], data["framerate"], fileName.removesuffix(".json"), data["loops"], data["repeatOnLoop"])
+        except FileNotFoundError as fnfe:
+            return f"Animation file not found {fnfe.filename}"
+
+    def loadEmptyAnimation(self):
+        emptyFrames = [[[0, 0, 0] for frame in range(self.LED_COUNT)]]
+        self.currentAnimation = animation(emptyFrames, "", 1, "None")
 
     def command(self, command) -> str:
         self.commands.append(command)
 
-    def killCurrentAnimation(self, playDefault=True) -> str:
-        if self.currentAnimation is None or not self.currentAnimation.is_alive:
-            print("no current animation (Good)")
-            return "No current animation"
-        elif self.currentAnimationName != "default.json" and self.defaultAnimationPresent and playDefault:
-            print("about to start default (bad)")
-            self.startAnimation("default.json")
+    def startAnimation(self, animationFile: str):
+        selectedAnimation = self.loadAnimation(animationFile)
+        if isinstance(selectedAnimation, animation):
+            self.currentAnimation = selectedAnimation
+            return "OK"
         else:
-            self.currentAnimation = None
-            self.currentAnimationName = None
-        self.stopCurrentAnimation = True
-        # self.currentAnimation.join()#makes looping suck if this is on and i dont think we need
+            return selectedAnimation
 
 
 # the real stuff here
 can = bluetoinumContainer()
-pygame.mixer.init()
+mixer.init()
 
 
 @can.command
@@ -188,29 +201,28 @@ def fill(canister: bluetoinumContainer, color):
 
 @can.command
 def stop(canister: bluetoinumContainer) -> str:
-    canister.killCurrentAnimation(playDefault=False)
+    canister.stopCurrentAnimation(loadDefault=False)
     canister.active = False
     return "OK"
 
 
 @can.command
 def shutdown(canister: bluetoinumContainer) -> str:
-    canister.killCurrentAnimation(playDefault=False)
+    canister.stopCurrentAnimation(loadDefault=False)
     canister.active = False
     canister.shutdown = True
+    return "OK"
 
 
 @can.command
-def killAnimation(canister: bluetoinumContainer):
-    return canister.killCurrentAnimation()
+def stopCurrentAnimation(canister: bluetoinumContainer):
+    print("running this stop command")
+    return canister.stopCurrentAnimation()
 
 
 @can.command
 def getCurrentAnimation(canister: bluetoinumContainer):
-    if canister.currentAnimation is None or not canister.currentAnimation.is_alive:
-        return "No active animation"
-    else:
-        return f"current animation : {canister.currentAnimationName}"
+    return canister.currentAnimation.getName()
 
 
 @can.command
@@ -230,24 +242,11 @@ def getSoundList(canister: bluetoinumContainer):
 
 @can.command
 def playSound(canister: bluetoinumContainer, soundFile: str):
-    if canister.loadSound(soundFile):
-        return "OK"
-    return "Sound file not found"
-
-
-@can.command
-def mute(canister: bluetoinumContainer, mute: bool = True):  # technically not muting, but shutup
-    if mute:
-        pygame.mixer.music.pause()
-    else:
-        pygame.mixer.music.unpause()
-    return "OK"
-
-
-@can.command
-def setVolume(canister: bluetoinumContainer, volume: float):
-    pygame.mixer.music.set_volume(volume)
-    canister.currentVolume = volume
+    if os.path.isfile(canister.soundDir + soundFile):
+        mixer.music.fadeout(500)
+        mixer.music.unload()
+        mixer.music.load(canister.soundDir + soundFile)
+        mixer.music.play()
 
 
 @can.command
