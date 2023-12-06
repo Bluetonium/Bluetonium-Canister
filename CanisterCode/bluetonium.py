@@ -254,34 +254,6 @@ def playAnimation(canister: bluetoinumContainer, animation):
     return canister.startAnimation(animation)
 
 
-@can.command
-def morseCode(canister: bluetoinumContainer, text: str):  # your welcome gracie
-    text = text.lower()
-    color = [255, 0, 0]
-    morseCodeKey = {"a": ".-", "b": "-...", "c": "-.-.", "d": "-..",
-                    "e": ".", "f": "..-.", "g": "--.", "h": "....", "i": "..", "j": ".---", "k": "-.-", "l": ".-..", "m": "--", "n": "-.", "o": "---", "p": ".--.", "q": "--.-", "r": ".-.", "s": "...", "t": "-", "u": "..-", "v": "...-", "w": ".--", "x": "-..-", "y": "-.--", "z": "--..", " ": "  "}
-    framerate = 10
-    frames = []
-    encodedMessage = [[0, 0, 0] for x in range(canister.LED_COUNT)]
-    for letter in text:
-        morse = morseCodeKey[letter]
-        for c in morse:
-            if c == ".":
-                encodedMessage.append(color)
-            elif c == "-":
-                encodedMessage.append(color)
-                encodedMessage.append(color)
-            encodedMessage.append([0, 0, 0])
-
-    encodedMessage += [[0, 0, 0] for x in range(canister.LED_COUNT)]
-    for f in range(0, len(encodedMessage) - canister.LED_COUNT):
-        frames.append(encodedMessage[f:f + canister.LED_COUNT])
-    canister.currentAnimation = animation(
-        frames, "", framerate, f"morseCode : {text}")
-
-    return "OK"
-
-
 shutdown = can.start()
 print("stopping")
 if shutdown:
