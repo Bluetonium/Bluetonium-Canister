@@ -59,9 +59,9 @@ class animation:
 class bluetoinumContainer:
     def __init__(self):
         self.DIR = "/home/bluetonium/CanisterCode/"
-        self.LED_COUNT = 61 # wait a minute isnt it 61?
+        self.LED_COUNT = 61
         self.LED_PIN = board.D10
-        self.MAIN_LED_PIN = 6
+        self.MAIN_LED_PIN = 6 # dont blame me if it doesnt work henry :)
         self.PORT = 5
         self.ADDRESS = "B8:27:EB:55:55:59"
         self.animationDir = self.DIR + "animations/"
