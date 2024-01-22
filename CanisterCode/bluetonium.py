@@ -9,6 +9,8 @@ import neopixel
 from pygame import mixer
 import json
 from datetime import datetime
+import RPi.GPIO as GPIO
+
 
 
 class animation:
@@ -57,8 +59,9 @@ class animation:
 class bluetoinumContainer:
     def __init__(self):
         self.DIR = "/home/bluetonium/CanisterCode/"
-        self.LED_COUNT = 50
+        self.LED_COUNT = 61 # wait a minute isnt it 61?
         self.LED_PIN = board.D10
+        self.MAIN_LED_PIN = 6
         self.PORT = 5
         self.ADDRESS = "B8:27:EB:55:55:59"
         self.animationDir = self.DIR + "animations/"
@@ -67,6 +70,11 @@ class bluetoinumContainer:
         self.currentAnimation = None
         self.leds = neopixel.NeoPixel(
             self.LED_PIN, self.LED_COUNT, brightness=1, auto_write=False)
+
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.MAIN_LED_PIN,GPIO.OUT)
+        GPIO.output(self.MAIN_LED_PIN,0) # lol
+        
         self.leds.fill((0, 0, 0))
         self.commands = []
         self.defaultAnimationPresent = os.path.isfile(
@@ -123,6 +131,7 @@ class bluetoinumContainer:
         server.close()
         return self.shutdownAfterStop
 
+    
     def animationPlayer(self):
         while self.active:
             finished = self.currentAnimation.play(self.leds)
@@ -176,6 +185,8 @@ class bluetoinumContainer:
             return "OK"
         else:
             return selectedAnimation
+    def setMainLed(self, mode: int):
+        GPIO.output(self.MAIN_LED_PIN,mode) # lol
 
 
 # the real stuff here
@@ -248,6 +259,10 @@ def playSound(canister: bluetoinumContainer, soundFile: str):
         mixer.music.load(canister.soundDir + soundFile)
         mixer.music.play()
 
+@can.command
+def setMainLed(canister: bluetoinumContainer, mode: int):
+    canister.setMainLed(mode)
+    return "OK"
 
 @can.command
 def playAnimation(canister: bluetoinumContainer, animation):
