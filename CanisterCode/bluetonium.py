@@ -213,6 +213,8 @@ def fill(canister: bluetoinumContainer, color):
 @can.command
 def stop(canister: bluetoinumContainer) -> str:
     canister.stopCurrentAnimation(loadDefault=False)
+    canister.leds.fill((0,0,0))
+    canister.setMainLed(0)
     canister.active = False
     return "OK"
 
