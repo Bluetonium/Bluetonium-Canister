@@ -109,7 +109,7 @@ class bluetoinumContainer:
                         break
                     try:
                         data = json.loads(data.decode())
-                        print(data)
+                        self.log(data)
                         commandName = data["command"]
                         self.log(f"Command : {commandName}")
                         for command in self.commands:
@@ -148,15 +148,12 @@ class bluetoinumContainer:
             file.write(f"{currentTime} : {message}\n")
 
     def stopCurrentAnimation(self, loadDefault=True):
-        print("lets try to stop the animation")
         if loadDefault and self.defaultAnimationPresent and self.currentAnimation.getName() != "default":
             self.startAnimation("default.json")
-            print("loading default")
-            print(f"current {self.currentAnimation.getName()}")
+            self.log("loading default")
         else:
             self.loadEmptyAnimation()
-            print("loading empty")
-            print(f"current {self.currentAnimation.getName()}")
+            self.log("loading empty")
         return "OK"
 
     def loadAnimation(self, fileName: str) -> animation:
@@ -164,7 +161,7 @@ class bluetoinumContainer:
             with open(self.animationDir + fileName) as file:
                 data = json.load(file)
                 if data["sound"] != "" and not os.path.isfile(self.soundDir + data["sound"]):
-                    print("Sound not found at " +
+                    self.log("Sound not found at " +
                           self.soundDir + data["sound"])
                     return "Sound file not found"
                 return animation(data["frames"], data["sound"], data["framerate"], fileName.removesuffix(".json"), data["loops"], data["repeatOnLoop"])
@@ -229,7 +226,6 @@ def shutdown(canister: bluetoinumContainer) -> str:
 
 @can.command
 def stopCurrentAnimation(canister: bluetoinumContainer):
-    print("running this stop command")
     return canister.stopCurrentAnimation()
 
 
@@ -272,6 +268,5 @@ def playAnimation(canister: bluetoinumContainer, animation):
 
 
 shutdown = can.start()
-print("stopping")
 if shutdown:
     os.system("sudo shutdown -h now")
